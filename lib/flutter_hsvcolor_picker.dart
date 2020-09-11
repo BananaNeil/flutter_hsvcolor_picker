@@ -45,6 +45,7 @@ class SliderPicker extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
   final List<Color> colors;
+  final Color thumbColor;
   final Widget child;
 
   const SliderPicker({
@@ -55,6 +56,7 @@ class SliderPicker extends StatefulWidget {
     @required this.onChanged,
     this.colors,
     this.child,
+    this.thumbColor,
   }) : assert(value != null),
         assert(value >= min && value <= max),
         super(key: key);
@@ -126,7 +128,7 @@ class _SliderPickerState extends State<SliderPicker> {
                     transform: new Matrix4.identity()..translate(
                         _ThumbPainter.getWidth(this.getRatio(), maxWidth)
                     ),
-                    child: new CustomPaint(painter: new _ThumbPainter()),
+                    child: new CustomPaint(painter: new _ThumbPainter(fillColor: super.widget.thumbColor ?? Colors.transparent)),
                   )
               ),
 
@@ -192,7 +194,9 @@ class _SliderLayout extends MultiChildLayoutDelegate {
 
 /// Thumb
 class _ThumbPainter extends CustomPainter {
+  _ThumbPainter({this.fillColor = Colors.transparent});
 
+  Color fillColor;
   static double width = 12;
   static double trackWidth = 14;
   static double doubleTrackWidth = 28;
@@ -201,9 +205,11 @@ class _ThumbPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final Paint paintColor = new Paint()..color=fillColor..strokeWidth=6..style=PaintingStyle.fill;
     final Paint paintWhite = new Paint()..color=Colors.white..strokeWidth=4..style=PaintingStyle.stroke;
     final Paint paintBlack = new Paint()..color=Colors.black..strokeWidth=6..style=PaintingStyle.stroke;
 
+    canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintColor);
     canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintBlack);
     canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintWhite);
   }
