@@ -43,7 +43,10 @@ class SliderPicker extends StatefulWidget {
   final double min;
   final double max;
   final double value;
+  final double height;
   final ValueChanged<double> onChanged;
+  final List<double> gradientStops;
+  final List<List<Color>> colorRows;
   final List<Color> colors;
   final Color thumbColor;
   final Widget child;
@@ -52,8 +55,11 @@ class SliderPicker extends StatefulWidget {
     Key key,
     this.min = 0.0,
     this.max = 1.0,
+    this.height = 40.0,
     @required this.value,
     @required this.onChanged,
+    this.gradientStops,
+    this.colorRows,
     this.colors,
     this.child,
     this.thumbColor,
@@ -67,9 +73,11 @@ class SliderPicker extends StatefulWidget {
 
 class _SliderPickerState extends State<SliderPicker> {
 
+  double get height=> super.widget.height;
   double get value=> super.widget.value;
   double get min=> super.widget.min;
   double get max=> super.widget.max;
+  List<List<Color>> get colors=> super.widget.colorRows ?? [super.widget.colors];
 
   double getRatio() => ((value - min) / (max - min)).clamp(0.0, 1.0);
   void setRatio(double ratio) => super.widget.onChanged((ratio * (max - min) + min).clamp(min, max));
@@ -82,42 +90,80 @@ class _SliderPickerState extends State<SliderPicker> {
   }
 
 
-  BorderRadius radius = const BorderRadius.all(const Radius.circular(20.0));
+  BorderRadius get radius => BorderRadius.all(Radius.circular(height / 2));
 
   Widget buildSlider(double maxWidth) {
     return new Container(
         width: maxWidth,
         child: new CustomMultiChildLayout(
-            delegate: new _SliderLayout(),
+            delegate: new _SliderLayout(heightOverride: height),
             children: <Widget>[
 
               //Track
               new LayoutId(
                   id: _SliderLayout.track,
-                  child: (super.widget.colors==null)?
+                  child: Stack(
+                    children: [
 
-                  //child
-                  new DecoratedBox(
-                      decoration: BoxDecoration(
-                          borderRadius: this.radius,
-                          border: new Border.all(color: Colors.grey, width: 1)
+                    //child
+                    Container(
+                      height: height,
+                      child:  DecoratedBox(
+                        decoration: BoxDecoration(
+                            borderRadius: this.radius,
+                            border: new Border.all(color: Colors.grey, width: 1)
+                        ),
+                        child: new ClipRRect(
+                            borderRadius: this.radius,
+                            child: super.widget.child
+                        )
                       ),
-                      child: new ClipRRect(
-                          borderRadius: this.radius,
-                          child: super.widget.child
-                      )
-                  ):
-
-                  //Color
-                  new DecoratedBox(
-                      decoration: BoxDecoration(
+                    ),
+                    // Multi gradients
+                    Container(
+                      height: height,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
                           borderRadius: this.radius,
                           border: new Border.all(color: Colors.grey, width: 1),
-                          gradient: new LinearGradient(
-                              colors: super.widget.colors
-                          )
-                      )
+                        ),
+                        child: new ClipRRect(
+                            borderRadius: this.radius,
+                            child: colors[0] == null ? Container() : Column(
+                              children: //[
+                                // FractionallySizedBox(
+                                //   heightFactor: 0.3,
+                                List.generate(colors.length, (index) => index).map((index) =>
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                          // color: Colors.red,
+                                          gradient: new LinearGradient(
+                                              colors: colors[index],
+                                              stops: super.widget.gradientStops,
+                                          )
+                                      )
+                                    )
+                                  )
+                                ).toList(),
+                              // ]
+                            )
+                        )
+                    )
+                    )
+                  ]
                   )
+
+                  // //Color
+                  // new DecoratedBox(
+                  //     decoration: BoxDecoration(
+                  //         borderRadius: this.radius,
+                  //         border: new Border.all(color: Colors.grey, width: 1),
+                  //         gradient: new LinearGradient(
+                  //             colors: super.widget.colors
+                  //         )
+                  //     )
+                  // )
 
               ),
 
@@ -126,9 +172,12 @@ class _SliderPickerState extends State<SliderPicker> {
                   id: _SliderLayout.thumb,
                   child: new Transform(
                     transform: new Matrix4.identity()..translate(
-                        _ThumbPainter.getWidth(this.getRatio(), maxWidth)
+                      (this.getRatio() * (maxWidth - height)) + height / 2
                     ),
-                    child: new CustomPaint(painter: new _ThumbPainter(fillColor: super.widget.thumbColor ?? Colors.transparent)),
+                    child: new CustomPaint(painter: new _ThumbPainter(
+                      fillColor: super.widget.thumbColor ?? Colors.transparent,
+                      size: height
+                    )),
                   )
               ),
 
@@ -154,10 +203,12 @@ class _SliderPickerState extends State<SliderPicker> {
 
   @override
   Widget build(BuildContext context) {
-    return new SizedBox(
-        height: 40.0,
-        child: new LayoutBuilder(
-            builder: (context, box) => this.buildSlider(box.maxWidth)
+    return new Container(
+        child: SizedBox(
+          height: height,
+          child: new LayoutBuilder(
+              builder: (context, box) => this.buildSlider(box.maxWidth)
+          )
         )
     );
   }
@@ -166,7 +217,9 @@ class _SliderPickerState extends State<SliderPicker> {
 
 /// Slider
 class _SliderLayout extends MultiChildLayoutDelegate {
+  _SliderLayout({this.heightOverride});
 
+  num heightOverride;
   static final String track = "track";
   static final String thumb = "thumb";
   static final String gestureContainer = "gesturecontainer";
@@ -175,13 +228,16 @@ class _SliderLayout extends MultiChildLayoutDelegate {
   @override
   void performLayout(Size size) {
 
+    var height = (heightOverride ?? size.height);
+    var outlineWidth = _ThumbPainter.outlineWidthRatio * height;
+
     //Track
-    super.layoutChild(track, BoxConstraints.tightFor(width: size.width, height: _ThumbPainter.doubleTrackWidth));
-    super.positionChild(track, Offset(0.0, size.height / 2 - _ThumbPainter.trackWidth));
+    super.layoutChild(track, BoxConstraints.tightFor(width: size.width, height: height - outlineWidth * 2));
+    super.positionChild(track, Offset(0.0, outlineWidth));
 
     //Thumb
     super.layoutChild(thumb, BoxConstraints.tightFor(width: 10.0, height: size.height / 2));
-    super.positionChild(thumb, Offset(0.0, size.height * 0.5));
+    super.positionChild(thumb, Offset(0.0, height * 0.5));
 
     //GestureContainer
     super.layoutChild(gestureContainer, BoxConstraints.tightFor(width: size.width, height: size.height));
@@ -194,24 +250,31 @@ class _SliderLayout extends MultiChildLayoutDelegate {
 
 /// Thumb
 class _ThumbPainter extends CustomPainter {
-  _ThumbPainter({this.fillColor = Colors.transparent});
+  _ThumbPainter({this.fillColor = Colors.transparent, this.size = 40.0});
 
+  double size;
   Color fillColor;
+  static double outlineWidthRatio = 0.15;
+  // static double get outlineWidth => size * 0.15;
+
   static double width = 12;
   static double trackWidth = 14;
   static double doubleTrackWidth = 28;
   static double getWidth(double value, double maxWidth) =>
-      (maxWidth - trackWidth- trackWidth) * value + trackWidth;
+      maxWidth * value;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paintColor = new Paint()..color=fillColor..strokeWidth=6..style=PaintingStyle.fill;
-    final Paint paintWhite = new Paint()..color=Colors.white..strokeWidth=4..style=PaintingStyle.stroke;
-    final Paint paintBlack = new Paint()..color=Colors.black..strokeWidth=6..style=PaintingStyle.stroke;
+  void paint(Canvas canvas, Size canvasSize) {
 
-    canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintColor);
-    canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintBlack);
-    canvas.drawCircle(Offset.zero, _ThumbPainter.width, paintWhite);
+    var outlineWidth = size * outlineWidthRatio;
+
+    final Paint paintColor = new Paint()..color=fillColor..style=PaintingStyle.fill;
+    final Paint paintWhite = new Paint()..color=Colors.white..strokeWidth=outlineWidth-2..style=PaintingStyle.stroke;
+    final Paint paintBlack = new Paint()..color=Colors.black..strokeWidth=outlineWidth..style=PaintingStyle.stroke;
+
+    canvas.drawCircle(Offset.zero, (size - outlineWidth) * 0.5, paintColor);
+    canvas.drawCircle(Offset.zero, (size - outlineWidth) * 0.5, paintBlack);
+    canvas.drawCircle(Offset.zero, (size - outlineWidth) * 0.5, paintWhite);
   }
 
   @override
